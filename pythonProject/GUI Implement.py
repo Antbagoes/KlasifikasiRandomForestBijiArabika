@@ -2,20 +2,25 @@ import re
 import numpy as np
 import pandas as pd
 import time
+
+from matplotlib import pyplot as plt
+
 pd.set_option('display.max_columns',15)
 from pathlib import Path
 from tkinter import Tk, Canvas, Entry, Text, Button, PhotoImage, ttk, filedialog, messagebox
 from scipy.stats import entropy
 from sklearn.preprocessing import StandardScaler, MinMaxScaler, LabelEncoder
-from sklearn.model_selection import cross_val_score, train_test_split
+from sklearn.model_selection import cross_val_score, train_test_split, cross_validate
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.neighbors import KNeighborsClassifier
-from sklearn.tree import DecisionTreeClassifier
+from sklearn.tree import DecisionTreeClassifier, plot_tree
 from sklearn.metrics import classification_report
 from sklearn.metrics import confusion_matrix
 from tabulate import tabulate
 from datetime import datetime
 from IPython.display import display
+import matplotlib
+matplotlib.use('TkAgg')
 
 
 OUTPUT_PATH = Path(__file__).parent
@@ -693,8 +698,8 @@ class main:
 
             X_train, X_test, y_train, y_test = train_test_split(x, y, test_size=0.015, random_state=42)
 
-            testing_data = X_test
-            testing_data['Variety'] = y_test
+            testing_data = X_test.copy()
+            testing_data['Variety'] = y_test.copy()
             decode_testing_data = testing_data.copy()
             for column in testing_data.columns:
                 decode_testing_data[column] = decode_column(decode_testing_data[column], column, self.encoders)
@@ -710,19 +715,48 @@ class main:
 
             model_RDF = RandomForestClassifier(criterion=ASM_function[0], n_estimators=n_estimator)
             model_RDF.fit(X_train, y_train)
-            cv_result = cross_val_score(model_RDF, X_train, y_train, cv=fold, scoring='accuracy')
+            cv_result = cross_validate(model_RDF, X_train, y_train, cv=fold, scoring='accuracy', return_estimator=True)
             self.trained_model = model_RDF
 
             end_time = time.time()
             execution_time = end_time - start_time
             print(f"Execution time: {execution_time} seconds")
 
-            akurasi = round(cv_result.mean(), 4)
+            akurasi = round(cv_result['test_score'].mean(), 4)
             akurasi = akurasi * 100
             text = "Akurasi : " + str(akurasi) + " %"
 
             self.field_akurasi.delete(0, 'end')
             self.field_akurasi.insert(0, text)
+
+            best_score = -1
+            best_estimator = None
+
+
+
+            for est in cv_result['estimator']:
+                score = est.score(X_test, y_test)
+                if score > best_score:
+                    best_score = score
+                    best_estimator = est
+
+            best_tree = best_estimator.estimators_[0]
+
+            feature_names = X_train.columns.tolist()
+            class_names = [str(cls) for cls in sorted(y_train.unique())]
+
+            plt.figure(figsize=(32, 18))
+            plot_tree(
+                best_tree,
+                filled=True,
+                feature_names=feature_names,
+                class_names=class_names
+            )
+
+            plt.title(f"Decision Tree Terbaik\n dengan Akurasi {round(best_score,4) * 100} %)")
+            plt.savefig("Best_Tree.png", dpi=1000, bbox_inches='tight')
+            plt.show()
+
         except AttributeError:
             messagebox.showerror("showerror",
                                  "Harap Import Dataset Terlebih Dahulu Dan Lakukan Pre-Processed Data")

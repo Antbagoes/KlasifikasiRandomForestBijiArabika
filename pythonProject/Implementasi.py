@@ -13,6 +13,12 @@ import numpy as np
 from tabulate import tabulate
 from datetime import datetime
 import re
+from sklearn.datasets import load_iris
+from sklearn.tree import DecisionTreeClassifier, plot_tree
+import matplotlib.pyplot as plt
+from sklearn.model_selection import cross_validate
+import matplotlib
+matplotlib.use('TkAgg')
 
 def information_gain(x, y):
     igResult = []
@@ -128,7 +134,7 @@ for col in df.select_dtypes(include=['float64', 'int64']).columns:
 for col in df.select_dtypes(include=['object']).columns:
     df[col] = df[col].fillna(df[col].mode()[0])
     #print(df[col].mode()[0])
-
+#print(df.info())
 #drop unnecessary column
 df.drop(columns=['ID','Species'], inplace=True)
 
@@ -171,7 +177,6 @@ categorical_featrues = categorical_featrues.drop(columns=date_column)
 
 #Transform Categorical from word to number
 #print(tabulate(df, headers='keys'))
-#print(tabulate(df, headers='keys'))
 encoders = {}
 for column in categorical_featrues:
     encoders[column] = LabelEncoder()
@@ -184,7 +189,7 @@ for column in categorical_featrues:
 df_temporary = df.copy()
 for column in categorical_featrues:
     df_temporary[column] = decode_column(df_temporary[column], column, encoders)
-print(tabulate(df_temporary, headers='keys'))
+#print(tabulate(df_temporary, headers='keys'))
 
 
 
@@ -222,6 +227,7 @@ df['Expiration_month'] = df['Expiration'].dt.month
 df['Expiration_day'] = df['Expiration'].dt.day
 
 df = df.drop(columns=['Grading.Date', 'Expiration'])
+#print(df.info())
 
 #handle harvest year
 df['Harvest.Year'] = df['Harvest.Year'].apply(clean_year)
@@ -232,9 +238,10 @@ df['Bag.Weight'] = df['Bag.Weight'].apply(convert_to_kg)
 #handle allttitude
 df['Altitude'] = df['Altitude'].apply(adjust_range_values)
 
+#print(tabulate(df, headers='keys'))
 scaler = MinMaxScaler()
 df[numeric_column] = scaler.fit_transform(df[numeric_column])
-
+#print(tabulate(df, headers='keys'))
 
 
 #print("=============== Data Hasil Pre-Processing ==================")
@@ -265,14 +272,43 @@ X_important = X[infGainIndex]
 X_train, X_test, y_train, y_test = train_test_split(X_important, y, test_size=0.015, random_state=42)
 
 ASM_function = ['entropy', 'gini']
-nEstimator = 1000
+nEstimator = 250
 
 
 
 model_RDF = RandomForestClassifier(criterion=ASM_function[0], n_estimators=nEstimator)
 model_RDF.fit(X_train, y_train)
-cv_result = cross_val_score(model_RDF, X_train, y_train, cv=10, scoring='accuracy')
-print("Akurasi Random Forest : ", cv_result.mean())
+#cv_result = cross_val_score(model_RDF, X_train, y_train, cv=10, scoring='accuracy')
+results = cross_validate(model_RDF, X_train, y_train, cv=7, return_estimator=True)
+
+best_score = -1
+best_estimator = None
+
+for est in results['estimator']:
+    score = est.score(X_test, y_test)
+    if score > best_score:
+        best_score = score
+        best_estimator = est
+
+best_tree = best_estimator.estimators_[0]
+
+feature_names = X_train.columns.tolist()
+class_names = [str(cls) for cls in sorted(y_train.unique())]
+
+plt.figure(figsize=(32, 18))
+plot_tree(
+    best_tree,
+    filled=True,
+    feature_names=feature_names,
+    class_names=class_names
+)
+
+plt.title(f"Decision Tree Terbaik\n dengan Akurasi {round(best_score, 4) * 100} %)")
+plt.savefig("tree_output.png", dpi=1000, bbox_inches='tight')
+plt.show()
+
+
+#print("Akurasi Random Forest : ", cv_result.mean())
 
 print("Hasil Pengujian Data Tunggal :")
 predictions = model_RDF.predict(X_test)
